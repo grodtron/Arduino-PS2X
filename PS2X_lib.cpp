@@ -72,12 +72,12 @@ unsigned char PS2X::_gamepad_shiftinout (char byte) {
    return tmp;
 }
 
-void PS2X::read_gamepad() {
-    read_gamepad(false, 0x00);
+byte PS2X::read_gamepad() {
+    return read_gamepad(false, 0x00);
 }
 
 
-void PS2X::read_gamepad(boolean motor1, byte motor2) {
+byte PS2X::read_gamepad(boolean motor1, byte motor2) {
   double temp = millis() - last_read;
   uint8_t old_sreg = SREG;        // *** KJE **** save away the current state of interrupts - *** *** KJE *** ***
   
@@ -136,6 +136,19 @@ void PS2X::read_gamepad(boolean motor1, byte motor2) {
 	
    buttons = *(uint16_t*)(PS2data+3);   //store as one value for multiple functions
    last_read = millis();
+   
+   if((PS2data[1] != 0x41 && PS2data[1] != 0x73) || PS2data[2] != 0x5A){ // Verify that it replied back data
+      #ifdef PS2X_DEBUG
+		Serial.println("Controller mode not matched or no controller found");
+		Serial.print("Expected 0x41, 0x5A, got ");
+		Serial.println(PS2data[1], HEX);
+	  #endif
+	 
+	 return 1; //return error code 1
+	}else{
+        return 0;
+    }
+   
 }
 
 byte PS2X::config_gamepad(uint8_t clk, uint8_t cmd, uint8_t att, uint8_t dat) {
@@ -175,10 +188,10 @@ byte PS2X::config_gamepad(uint8_t clk, uint8_t cmd, uint8_t att, uint8_t dat, bo
    read_gamepad();
    
    //see if it talked
-   if(PS2data[1] != 0x41 && PS2data[1] != 0x73 && PS2data[1] != 0x79){ //see if mode came back. If still anything but 41, 73 or 79, then it's not talking
+   if(PS2data[1] != 0x41 && PS2data[1] != 0x73 && PS2data[1] != 0x79 && PS2data[1] != 0xF3){ //see if mode came back. If still anything but 41, 73 or 79, then it's not talking
       #ifdef PS2X_DEBUG
 		Serial.println("Controller mode not matched or no controller found");
-		Serial.print("Expected 0x41 or 0x73, got ");
+		Serial.print("Expected 0x41, 0x73, 0x79, or 0xF3 got ");
 		Serial.println(PS2data[1], HEX);
 	  #endif
 	 
@@ -221,15 +234,14 @@ byte PS2X::config_gamepad(uint8_t clk, uint8_t cmd, uint8_t att, uint8_t dat, bo
    read_gamepad();
    
    if(pressures){
-	if(PS2data[1] == 0x79)
-		break;
 	if(PS2data[1] == 0x73)
-		return 3;
+		break;
+   }else{
+    if(PS2data[1] == 0x41)
+      break;       
    }
    
-    if(PS2data[1] == 0x73)
-      break;
-      
+     
     if(y == 10){
 		#ifdef PS2X_DEBUG
 		Serial.println("Controller not accepting commands");
